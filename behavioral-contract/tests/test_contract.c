@@ -4,12 +4,14 @@
 
 static unsigned failures;
 
-#define CHECK(expression) \
-    do { \
-        if (!(expression)) { \
+#define CHECK(expression)                                                         \
+    do                                                                            \
+    {                                                                             \
+        if (!(expression))                                                        \
+        {                                                                         \
             fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #expression); \
-            ++failures; \
-        } \
+            ++failures;                                                           \
+        }                                                                         \
     } while (0)
 
 static void test_masks(void)
@@ -28,13 +30,8 @@ static void test_masks(void)
 static void test_translation_and_boundaries(void)
 {
     const tlb_entry_t entries[] = {
-        { .virtual_base = 0x1200, .physical_base = 0x8000,
-          .address_mask = 0xFF00, .asid = 1,
-          .permissions = TLB_PERMISSION_READ, .valid = true },
-        { .virtual_base = 0x2230, .physical_base = 0xA000,
-          .address_mask = 0xFFF0, .asid = 1,
-          .permissions = TLB_PERMISSION_READ, .valid = true }
-    };
+        {.virtual_base = 0x1200, .physical_base = 0x8000, .address_mask = 0xFF00, .asid = 1, .permissions = TLB_PERMISSION_READ, .valid = true},
+        {.virtual_base = 0x2230, .physical_base = 0xA000, .address_mask = 0xFFF0, .asid = 1, .permissions = TLB_PERMISSION_READ, .valid = true}};
     uint64_t physical_address = 0;
 
     CHECK(tlb_lookup(entries, 2, 0x12FF, 16, 1, TLB_ACCESS_READ,
@@ -52,11 +49,7 @@ static void test_translation_and_boundaries(void)
 static void test_validity_and_permissions(void)
 {
     tlb_entry_t entry = {
-        .virtual_base = 0x1200, .physical_base = 0xA000,
-        .address_mask = 0xFFF0, .asid = 7,
-        .permissions = TLB_PERMISSION_READ | TLB_PERMISSION_EXECUTE,
-        .valid = true
-    };
+        .virtual_base = 0x1230, .physical_base = 0xA000, .address_mask = 0xFFF0, .asid = 7, .permissions = TLB_PERMISSION_READ | TLB_PERMISSION_EXECUTE, .valid = true};
     uint64_t physical_address = 0;
 
     entry.valid = false;
@@ -65,8 +58,10 @@ static void test_validity_and_permissions(void)
     entry.valid = true;
     CHECK(tlb_lookup(&entry, 1, 0x1234, 16, 7, TLB_ACCESS_READ,
                      &physical_address) == TLB_RESULT_HIT);
+    physical_address = UINT64_C(0xDEADBEEF);
     CHECK(tlb_lookup(&entry, 1, 0x1234, 16, 7, TLB_ACCESS_WRITE,
                      &physical_address) == TLB_RESULT_PERMISSION_FAULT);
+    CHECK(physical_address == UINT64_C(0xDEADBEEF));
     CHECK(tlb_lookup(&entry, 1, 0x1234, 16, 7, TLB_ACCESS_EXECUTE,
                      &physical_address) == TLB_RESULT_HIT);
 }
@@ -74,13 +69,8 @@ static void test_validity_and_permissions(void)
 static void test_ambiguous_match_and_arguments(void)
 {
     const tlb_entry_t entries[] = {
-        { .virtual_base = 0x1200, .physical_base = 0x8000,
-          .address_mask = 0xFF00, .asid = 4,
-          .permissions = TLB_PERMISSION_READ, .valid = true },
-        { .virtual_base = 0x1230, .physical_base = 0xA000,
-          .address_mask = 0xFFF0, .asid = 4,
-          .permissions = TLB_PERMISSION_READ, .valid = true }
-    };
+        {.virtual_base = 0x1200, .physical_base = 0x8000, .address_mask = 0xFF00, .asid = 4, .permissions = TLB_PERMISSION_READ, .valid = true},
+        {.virtual_base = 0x1230, .physical_base = 0xA000, .address_mask = 0xFFF0, .asid = 4, .permissions = TLB_PERMISSION_READ, .valid = true}};
     uint64_t physical_address = 0;
 
     CHECK(tlb_lookup(entries, 2, 0x1234, 16, 4, TLB_ACCESS_READ,
@@ -94,14 +84,59 @@ static void test_ambiguous_match_and_arguments(void)
           TLB_RESULT_INVALID_ARGUMENT);
 }
 
+static void test_wide_addresses_and_malformed_entries(void)
+{
+    const tlb_entry_t wide_entry = {
+        .virtual_base = UINT64_C(0x123456789000),
+        .physical_base = UINT64_C(0xABCDEF123000),
+        .address_mask = UINT64_C(0xFFFFFFFFF000), .asid = 9,
+        .permissions = TLB_PERMISSION_READ, .valid = true};
+    tlb_entry_t malformed = {
+        .virtual_base = 0x1200, .physical_base = 0xA000,
+        .address_mask = 0xFFF0, .asid = 1,
+        .permissions = TLB_PERMISSION_READ, .valid = true};
+    uint64_t physical_address = 0;
+
+    CHECK(tlb_lookup(&wide_entry, 1, UINT64_C(0x123456789ABC), 48, 9,
+                     TLB_ACCESS_READ, &physical_address) == TLB_RESULT_HIT);
+    CHECK(physical_address == UINT64_C(0xABCDEF123ABC));
+
+    malformed.address_mask = 0xFFFA;
+    CHECK(tlb_lookup(&malformed, 1, 0x1234, 16, 1, TLB_ACCESS_READ,
+                     &physical_address) == TLB_RESULT_INVALID_ARGUMENT);
+    malformed.address_mask = 0xFFF0;
+    malformed.virtual_base = 0x1201;
+    CHECK(tlb_lookup(&malformed, 1, 0x1234, 16, 1, TLB_ACCESS_READ,
+                     &physical_address) == TLB_RESULT_INVALID_ARGUMENT);
+    malformed.virtual_base = 0x1200;
+    malformed.physical_base = 0xA001;
+    CHECK(tlb_lookup(&malformed, 1, 0x1234, 16, 1, TLB_ACCESS_READ,
+                     &physical_address) == TLB_RESULT_INVALID_ARGUMENT);
+    malformed.physical_base = 0xA000;
+    malformed.permissions = UINT8_C(0x80);
+    CHECK(tlb_lookup(&malformed, 1, 0x1234, 16, 1, TLB_ACCESS_READ,
+                     &physical_address) == TLB_RESULT_INVALID_ARGUMENT);
+
+    CHECK(tlb_lookup(NULL, 0, 0, 16, 1, TLB_ACCESS_READ,
+                     &physical_address) == TLB_RESULT_MISS);
+    CHECK(tlb_lookup(&malformed, 1, 0x10000, 16, 1, TLB_ACCESS_READ,
+                     &physical_address) == TLB_RESULT_INVALID_ARGUMENT);
+    CHECK(tlb_lookup(&malformed, 1, 0, 0, 1, TLB_ACCESS_READ,
+                     &physical_address) == TLB_RESULT_INVALID_ARGUMENT);
+    CHECK(tlb_lookup(&malformed, 1, 0, 16, 1, (tlb_access_t)99,
+                     &physical_address) == TLB_RESULT_INVALID_ARGUMENT);
+}
+
 int main(void)
 {
     test_masks();
     test_translation_and_boundaries();
     test_validity_and_permissions();
     test_ambiguous_match_and_arguments();
+    test_wide_addresses_and_malformed_entries();
 
-    if (failures != 0) {
+    if (failures != 0)
+    {
         fprintf(stderr, "%u contract check(s) failed\n", failures);
         return 1;
     }
