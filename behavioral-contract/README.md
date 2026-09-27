@@ -18,7 +18,7 @@ These rules are the proposed starting contract. Later components will enforce un
 
 Tests will cover valid and invalid entries, mask validity, matching and nonmatching addresses, page boundaries, ASID isolation, each permission, permission faults, and ambiguous matches. Small illustrative address widths will make boundary cases easy to inspect; realistic page-size configurations will be checked as well.
 
-The first addition will introduce the minimal test harness and contract tests before the production behavior. The following addition will add the contract API and implementation needed to pass those tests. Each addition is estimated at 160–180 lines, for roughly 320–360 lines total, excluding documentation and build configuration. These are estimates, not line-count targets.
+The first addition introduces the API contract, minimal test harness, and contract tests. Placeholder functions make the test executable report the expected failures before production behavior is implemented. The following addition will replace those placeholders with the contract behavior needed to pass the tests. Each addition is estimated at 160–180 lines, for roughly 320–360 lines total, excluding documentation and build configuration. These are estimates, not line-count targets.
 
 ## Planned Files
 
@@ -26,4 +26,4 @@ The first addition will introduce the minimal test harness and contract tests be
 - A C source file for the minimal contract behavior.
 - A focused test source file and the smallest project test/build configuration needed to run it.
 
-No C files have been created yet. The first code addition will be described before it begins, and its tests will be run before proceeding to the next component.
+The first addition contains the test scaffold and placeholder functions only; the matching and translation rules remain unimplemented. The tests for this component will be run before proceeding to the next component.

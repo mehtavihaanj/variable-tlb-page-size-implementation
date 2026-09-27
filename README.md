@@ -2,7 +2,7 @@
 
 This project will implement and test a small C model of the first design in the accompanying report: an eight-entry, fully associative TLB that uses a bitmask to match translations for different page sizes.
 
-The implementation will be developed test-first, one component at a time. Each component gets focused tests and a reviewable addition before it is integrated with the next component. No implementation code has been added yet.
+The implementation will be developed test-first, one component at a time. Each component gets focused tests and a reviewable addition before it is integrated with the next component. The behavioral contract is currently in its test-first scaffold; translation behavior is not implemented yet.
 
 ## Design Scope
 
