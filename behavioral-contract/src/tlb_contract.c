@@ -126,6 +126,27 @@ void tlb_init(tlb_t *tlb)
     }
 }
 
+static size_t find_matching_slot(const tlb_t *tlb, uint64_t virtual_address,
+                                 uint32_t asid)
+{
+    for (size_t index = 0; index < TLB_ENTRY_COUNT; ++index)
+    {
+        const tlb_entry_t *entry = &tlb->entries[index];
+        if (entry->valid && entry->asid == asid &&
+            (virtual_address & entry->address_mask) == entry->virtual_base)
+        {
+            return index;
+        }
+    }
+    return TLB_ENTRY_COUNT;
+}
+
+static void mark_recently_used(tlb_t *tlb, size_t slot)
+{
+    ++tlb->use_sequence;
+    tlb->last_used[slot] = tlb->use_sequence;
+}
+
 tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
                         unsigned address_bits, uint32_t asid,
                         tlb_access_t access, tlb_page_walker_t page_walker,
@@ -141,6 +162,15 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
                                      access, physical_address);
     if (result != TLB_RESULT_MISS)
     {
+        if (result == TLB_RESULT_HIT ||
+            result == TLB_RESULT_PERMISSION_FAULT)
+        {
+            size_t slot = find_matching_slot(tlb, virtual_address, asid);
+            if (slot < TLB_ENTRY_COUNT)
+            {
+                mark_recently_used(tlb, slot);
+            }
+        }
         return result;
     }
     if (page_walker == NULL)
@@ -157,11 +187,6 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
             break;
         }
     }
-    if (free_slot == TLB_ENTRY_COUNT)
-    {
-        return TLB_RESULT_FULL;
-    }
-
     tlb_entry_t translation = {0};
     if (!page_walker(walker_context, virtual_address, address_bits, asid,
                      access, &translation))
@@ -177,7 +202,20 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
         return TLB_RESULT_INVALID_TRANSLATION;
     }
 
+    if (free_slot == TLB_ENTRY_COUNT)
+    {
+        free_slot = 0;
+        for (size_t index = 1; index < TLB_ENTRY_COUNT; ++index)
+        {
+            if (tlb->last_used[index] < tlb->last_used[free_slot])
+            {
+                free_slot = index;
+            }
+        }
+    }
+
     tlb->entries[free_slot] = translation;
+    mark_recently_used(tlb, free_slot);
     return result;
 }
 

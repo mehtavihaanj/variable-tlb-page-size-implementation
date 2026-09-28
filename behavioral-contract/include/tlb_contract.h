@@ -22,7 +22,6 @@ typedef enum {
     TLB_RESULT_PERMISSION_FAULT,
     TLB_RESULT_AMBIGUOUS,
     TLB_RESULT_WALK_FAILED,
-    TLB_RESULT_FULL,
     TLB_RESULT_INVALID_TRANSLATION,
     TLB_RESULT_INVALID_ARGUMENT
 } tlb_result_t;
@@ -42,6 +41,8 @@ typedef bool (*tlb_page_walker_t)(void *context, uint64_t virtual_address,
 
 typedef struct {
     tlb_entry_t entries[TLB_ENTRY_COUNT];
+    uint64_t last_used[TLB_ENTRY_COUNT];
+    uint64_t use_sequence;
 } tlb_t;
 
 typedef enum {

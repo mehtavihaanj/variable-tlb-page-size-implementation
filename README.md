@@ -2,7 +2,7 @@
 
 This project will implement and test a small C model of the first design in the accompanying report: an eight-entry, fully associative TLB that uses a bitmask to match translations for different page sizes.
 
-The implementation will be developed test-first, one component at a time. Each component gets focused tests and a reviewable addition before it is integrated with the next component. The behavioral contract is currently in its test-first scaffold; translation behavior is not implemented yet.
+The implementation is developed test-first, one component at a time. Mask-aware lookup, refill, and overlap invalidation are implemented; LRU replacement and workload measurement remain in progress.
 
 ## Design Scope
 
@@ -16,13 +16,11 @@ The initial implementation models the first bitmask design only. It does not imp
 
 ## Test-Driven Sequence
 
-1. **Behavioral contract:** Define address and mask semantics, matching, ASID, validity, permissions, and multiple-match behavior. Write tests before implementation. See [behavioral-contract/README.md](behavioral-contract/README.md).
-2. **Mask and address helpers:** Validate supported masks and implement page matching, offset extraction, and physical-address construction.
-3. **Entry and TLB lookup:** Add the eight-entry fully associative lookup, including ASID and permission handling.
-4. **Page-walk/refill boundary:** Introduce a deterministic fake walker for tests, then refill on misses.
-5. **Invalidation:** Remove translations that overlap a reallocated or split mapping; ensure lookups cannot use stale entries.
-6. **Replacement:** Implement and test true LRU. 
-7. **Integration and measurement:** Exercise full access traces, then benchmark fixed workloads and report counters and memory use.
+1. **Behavioral contract:** Define and test mask semantics, matching, ASID, validity, permissions, and ambiguity. See [behavioral-contract/README.md](behavioral-contract/README.md).
+2. **State and refill:** Add fixed-capacity TLB state and a page-walker boundary.
+3. **Invalidation:** Remove translations that overlap a reallocated or split mapping.
+4. **Replacement:** Implement and test true LRU.
+5. **Integration and measurement:** Exercise multi-process traces, then benchmark fixed workloads and report counters and memory use.
 
 Each step starts with tests for its observable behavior. A component is integrated only after its focused tests pass. Integration tests then verify the combined path without replacing the component tests.
 
