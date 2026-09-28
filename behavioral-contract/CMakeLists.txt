@@ -11,5 +11,9 @@ target_include_directories(tlb_contract PUBLIC include)
 add_executable(test_contract tests/test_contract.c)
 target_link_libraries(test_contract PRIVATE tlb_contract)
 
+add_executable(test_tlb_state tests/test_tlb_state.c)
+target_link_libraries(test_tlb_state PRIVATE tlb_contract)
+
 enable_testing()
 add_test(NAME behavioral_contract COMMAND test_contract)
+add_test(NAME tlb_state COMMAND test_tlb_state)
