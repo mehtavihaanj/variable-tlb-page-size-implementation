@@ -147,6 +147,32 @@ static void mark_recently_used(tlb_t *tlb, size_t slot)
     tlb->last_used[slot] = tlb->use_sequence;
 }
 
+static unsigned page_order(uint64_t address_mask, unsigned address_bits)
+{
+    uint64_t offset_mask = ~address_mask & address_width_mask(address_bits);
+    unsigned order = 0;
+    while (offset_mask != 0)
+    {
+        ++order;
+        offset_mask >>= 1;
+    }
+    return order;
+}
+
+static void update_occupancy(tlb_t *tlb)
+{
+    size_t current = 0;
+    for (size_t index = 0; index < TLB_ENTRY_COUNT; ++index)
+    {
+        current += tlb->entries[index].valid ? 1 : 0;
+    }
+    tlb->stats.current_occupancy = current;
+    if (current > tlb->stats.peak_occupancy)
+    {
+        tlb->stats.peak_occupancy = current;
+    }
+}
+
 tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
                         unsigned address_bits, uint32_t asid,
                         tlb_access_t access, tlb_page_walker_t page_walker,
@@ -160,21 +186,38 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
     tlb_result_t result = tlb_lookup(tlb->entries, TLB_ENTRY_COUNT,
                                      virtual_address, address_bits, asid,
                                      access, physical_address);
-    if (result != TLB_RESULT_MISS)
+    if (result == TLB_RESULT_INVALID_ARGUMENT)
     {
-        if (result == TLB_RESULT_HIT ||
-            result == TLB_RESULT_PERMISSION_FAULT)
+        return result;
+    }
+
+    ++tlb->stats.accesses;
+    update_occupancy(tlb);
+    if (result == TLB_RESULT_AMBIGUOUS)
+    {
+        ++tlb->stats.ambiguous_lookups;
+        return result;
+    }
+    if (result == TLB_RESULT_HIT || result == TLB_RESULT_PERMISSION_FAULT)
+    {
+        size_t slot = find_matching_slot(tlb, virtual_address, asid);
+        if (slot < TLB_ENTRY_COUNT)
         {
-            size_t slot = find_matching_slot(tlb, virtual_address, asid);
-            if (slot < TLB_ENTRY_COUNT)
-            {
-                mark_recently_used(tlb, slot);
-            }
+            ++tlb->stats.hits;
+            ++tlb->stats.hits_by_page_order[
+                page_order(tlb->entries[slot].address_mask, address_bits)];
+            mark_recently_used(tlb, slot);
+        }
+        if (result == TLB_RESULT_PERMISSION_FAULT)
+        {
+            ++tlb->stats.permission_faults;
         }
         return result;
     }
+    ++tlb->stats.misses;
     if (page_walker == NULL)
     {
+        ++tlb->stats.unresolved_misses;
         return TLB_RESULT_INVALID_ARGUMENT;
     }
 
@@ -188,9 +231,11 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
         }
     }
     tlb_entry_t translation = {0};
+    ++tlb->stats.page_walks;
     if (!page_walker(walker_context, virtual_address, address_bits, asid,
                      access, &translation))
     {
+        ++tlb->stats.unresolved_misses;
         return TLB_RESULT_WALK_FAILED;
     }
 
@@ -199,11 +244,21 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
     if (result != TLB_RESULT_HIT &&
         result != TLB_RESULT_PERMISSION_FAULT)
     {
+        ++tlb->stats.unresolved_misses;
         return TLB_RESULT_INVALID_TRANSLATION;
     }
 
+    unsigned resolved_order = page_order(translation.address_mask,
+                                         address_bits);
+    ++tlb->stats.refills;
+    ++tlb->stats.misses_by_page_order[resolved_order];
+    if (result == TLB_RESULT_PERMISSION_FAULT)
+    {
+        ++tlb->stats.permission_faults;
+    }
     if (free_slot == TLB_ENTRY_COUNT)
     {
+        ++tlb->stats.evictions;
         free_slot = 0;
         for (size_t index = 1; index < TLB_ENTRY_COUNT; ++index)
         {
@@ -216,6 +271,7 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
 
     tlb->entries[free_slot] = translation;
     mark_recently_used(tlb, free_slot);
+    update_occupancy(tlb);
     return result;
 }
 
@@ -260,6 +316,13 @@ tlb_invalidation_result_t tlb_invalidate_overlap(
         }
     }
 
+    tlb->stats.invalidations += *invalidated_count;
+    update_occupancy(tlb);
     return *invalidated_count == 0 ? TLB_INVALIDATION_NO_MATCH :
                                     TLB_INVALIDATION_REMOVED;
+}
+
+size_t tlb_storage_bytes(void)
+{
+    return sizeof(tlb_t);
 }

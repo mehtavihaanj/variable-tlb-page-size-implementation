@@ -6,6 +6,8 @@
 #include <stdint.h>
 
 #define TLB_ENTRY_COUNT 8
+#define TLB_PAGE_ORDER_COUNT 65
+#define TLB_NOMINAL_ENTRY_BITS 52
 #define TLB_PERMISSION_READ UINT8_C(0x01)
 #define TLB_PERMISSION_WRITE UINT8_C(0x02)
 #define TLB_PERMISSION_EXECUTE UINT8_C(0x04)
@@ -40,9 +42,27 @@ typedef bool (*tlb_page_walker_t)(void *context, uint64_t virtual_address,
                                   tlb_access_t access, tlb_entry_t *translation);
 
 typedef struct {
+    uint64_t accesses;
+    uint64_t hits;
+    uint64_t misses;
+    uint64_t permission_faults;
+    uint64_t ambiguous_lookups;
+    uint64_t page_walks;
+    uint64_t refills;
+    uint64_t unresolved_misses;
+    uint64_t evictions;
+    uint64_t invalidations;
+    uint64_t hits_by_page_order[TLB_PAGE_ORDER_COUNT];
+    uint64_t misses_by_page_order[TLB_PAGE_ORDER_COUNT];
+    size_t current_occupancy;
+    size_t peak_occupancy;
+} tlb_stats_t;
+
+typedef struct {
     tlb_entry_t entries[TLB_ENTRY_COUNT];
     uint64_t last_used[TLB_ENTRY_COUNT];
     uint64_t use_sequence;
+    tlb_stats_t stats;
 } tlb_t;
 
 typedef enum {
@@ -59,6 +79,7 @@ tlb_result_t tlb_lookup(const tlb_entry_t *entries, size_t entry_count,
                         uint64_t *physical_address);
 
 void tlb_init(tlb_t *tlb);
+size_t tlb_storage_bytes(void);
 
 tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
                         unsigned address_bits, uint32_t asid,

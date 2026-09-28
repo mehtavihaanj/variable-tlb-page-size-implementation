@@ -26,9 +26,9 @@ Each step starts with tests for its observable behavior. A component is integrat
 
 ## Measurement Plan
 
-The simulator should expose these core counts: accesses, hits, misses, page walks/refills, evictions, and occupancy. Per-page-size hit/miss counts and invalidation counts are recommended to make variable-size behavior visible.
+The simulator records accesses, hits, misses, permission faults, ambiguous lookups, page walks/refills, unresolved misses, evictions, invalidations, and current/peak occupancy. Hit and resolved-miss counts are bucketed by page-size order; failed walks remain unresolved because their mapped size is unknown.
 
-Performance benchmarks will use repeatable traces and report elapsed time per access separately from correctness tests. Timing is diagnostic, not a pass/fail assertion, because host scheduling and hardware affect it. Memory reporting will distinguish the nominal packed entry bits from the actual C structure and allocated storage, which can include padding.
+Performance benchmarks will use repeatable traces and report elapsed time per access separately from correctness tests. Timing is diagnostic, not a pass/fail assertion, because host scheduling and hardware affect it. Memory reporting distinguishes the design's nominal 416 entry bits from the actual C model structure size, which includes metadata and padding.
 
 A C model cannot directly measure hardware TLB energy. It can report event counts and, if approved, calculate an explicitly labeled energy estimate using configurable costs per event. That estimate must not be presented as measured joules.
 
