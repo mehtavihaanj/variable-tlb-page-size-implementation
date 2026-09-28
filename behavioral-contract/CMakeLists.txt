@@ -14,6 +14,10 @@ target_link_libraries(test_contract PRIVATE tlb_contract)
 add_executable(test_tlb_state tests/test_tlb_state.c)
 target_link_libraries(test_tlb_state PRIVATE tlb_contract)
 
+add_executable(test_tlb_invalidation tests/test_tlb_invalidation.c)
+target_link_libraries(test_tlb_invalidation PRIVATE tlb_contract)
+
 enable_testing()
 add_test(NAME behavioral_contract COMMAND test_contract)
 add_test(NAME tlb_state COMMAND test_tlb_state)
+add_test(NAME tlb_invalidation COMMAND test_tlb_invalidation)

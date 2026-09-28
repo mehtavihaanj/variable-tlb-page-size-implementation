@@ -20,6 +20,20 @@ static bool address_fits_width(uint64_t address, unsigned address_bits)
     return (address & ~address_width_mask(address_bits)) == 0;
 }
 
+static bool entry_is_well_formed(const tlb_entry_t *entry,
+                                 unsigned address_bits)
+{
+    const uint8_t supported_permissions = TLB_PERMISSION_READ |
+                                          TLB_PERMISSION_WRITE |
+                                          TLB_PERMISSION_EXECUTE;
+    return tlb_mask_is_valid(entry->address_mask, address_bits) &&
+           address_fits_width(entry->virtual_base, address_bits) &&
+           address_fits_width(entry->physical_base, address_bits) &&
+           (entry->virtual_base & ~entry->address_mask) == 0 &&
+           (entry->physical_base & ~entry->address_mask) == 0 &&
+           (entry->permissions & (uint8_t)~supported_permissions) == 0;
+}
+
 bool tlb_mask_is_valid(uint64_t address_mask, unsigned address_bits)
 {
     if (address_bits == 0 || address_bits > 64 || address_mask == 0)
@@ -65,9 +79,6 @@ tlb_result_t tlb_lookup(const tlb_entry_t *entries, size_t entry_count,
         return TLB_RESULT_INVALID_ARGUMENT;
     }
 
-    const uint8_t supported_permissions = TLB_PERMISSION_READ |
-                                          TLB_PERMISSION_WRITE |
-                                          TLB_PERMISSION_EXECUTE;
     const tlb_entry_t *match = NULL;
     for (size_t index = 0; index < entry_count; ++index)
     {
@@ -77,12 +88,7 @@ tlb_result_t tlb_lookup(const tlb_entry_t *entries, size_t entry_count,
             continue;
         }
 
-        if (!tlb_mask_is_valid(entry->address_mask, address_bits) ||
-            !address_fits_width(entry->virtual_base, address_bits) ||
-            !address_fits_width(entry->physical_base, address_bits) ||
-            (entry->virtual_base & ~entry->address_mask) != 0 ||
-            (entry->physical_base & ~entry->address_mask) != 0 ||
-            (entry->permissions & (uint8_t)~supported_permissions) != 0)
+        if (!entry_is_well_formed(entry, address_bits))
         {
             return TLB_RESULT_INVALID_ARGUMENT;
         }
@@ -173,4 +179,49 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
 
     tlb->entries[free_slot] = translation;
     return result;
+}
+
+tlb_invalidation_result_t tlb_invalidate_overlap(
+    tlb_t *tlb, uint64_t virtual_base, uint64_t address_mask,
+    unsigned address_bits, uint32_t asid, size_t *invalidated_count)
+{
+    if (tlb == NULL || invalidated_count == NULL ||
+        !tlb_mask_is_valid(address_mask, address_bits) ||
+        !address_fits_width(virtual_base, address_bits) ||
+        (virtual_base & ~address_mask) != 0)
+    {
+        return TLB_INVALIDATION_INVALID_ARGUMENT;
+    }
+
+    for (size_t index = 0; index < TLB_ENTRY_COUNT; ++index)
+    {
+        const tlb_entry_t *entry = &tlb->entries[index];
+        if (entry->valid && !entry_is_well_formed(entry, address_bits))
+        {
+            return TLB_INVALIDATION_INVALID_ARGUMENT;
+        }
+    }
+
+    uint64_t width_mask = address_width_mask(address_bits);
+    uint64_t request_end = virtual_base | (~address_mask & width_mask);
+    *invalidated_count = 0;
+    for (size_t index = 0; index < TLB_ENTRY_COUNT; ++index)
+    {
+        tlb_entry_t *entry = &tlb->entries[index];
+        if (!entry->valid || entry->asid != asid)
+        {
+            continue;
+        }
+
+        uint64_t entry_end = entry->virtual_base |
+                             (~entry->address_mask & width_mask);
+        if (entry->virtual_base <= request_end && virtual_base <= entry_end)
+        {
+            entry->valid = false;
+            ++*invalidated_count;
+        }
+    }
+
+    return *invalidated_count == 0 ? TLB_INVALIDATION_NO_MATCH :
+                                    TLB_INVALIDATION_REMOVED;
 }

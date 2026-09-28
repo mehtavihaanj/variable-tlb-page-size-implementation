@@ -44,6 +44,12 @@ typedef struct {
     tlb_entry_t entries[TLB_ENTRY_COUNT];
 } tlb_t;
 
+typedef enum {
+    TLB_INVALIDATION_REMOVED,
+    TLB_INVALIDATION_NO_MATCH,
+    TLB_INVALIDATION_INVALID_ARGUMENT
+} tlb_invalidation_result_t;
+
 bool tlb_mask_is_valid(uint64_t address_mask, unsigned address_bits);
 
 tlb_result_t tlb_lookup(const tlb_entry_t *entries, size_t entry_count,
@@ -57,5 +63,9 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
                         unsigned address_bits, uint32_t asid,
                         tlb_access_t access, tlb_page_walker_t page_walker,
                         void *walker_context, uint64_t *physical_address);
+
+tlb_invalidation_result_t tlb_invalidate_overlap(
+    tlb_t *tlb, uint64_t virtual_base, uint64_t address_mask,
+    unsigned address_bits, uint32_t asid, size_t *invalidated_count);
 
 #endif
