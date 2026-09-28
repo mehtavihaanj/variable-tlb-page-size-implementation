@@ -2,7 +2,7 @@
 
 This project will implement and test a small C model of the first design in the accompanying report: an eight-entry, fully associative TLB that uses a bitmask to match translations for different page sizes.
 
-The implementation is developed test-first, one component at a time. Mask-aware lookup, refill, and overlap invalidation are implemented; LRU replacement and workload measurement remain in progress.
+The implementation is developed test-first, one component at a time. Mask-aware lookup, refill, overlap invalidation, LRU replacement, and event metrics are implemented. A deterministic process-mix harness compares fixed and mixed page-size mappings.
 
 ## Design Scope
 
@@ -28,7 +28,7 @@ Each step starts with tests for its observable behavior. A component is integrat
 
 The simulator records accesses, hits, misses, permission faults, ambiguous lookups, page walks/refills, unresolved misses, evictions, invalidations, and current/peak occupancy. Hit and resolved-miss counts are bucketed by page-size order; failed walks remain unresolved because their mapped size is unknown.
 
-Performance benchmarks will use repeatable traces and report elapsed time per access separately from correctness tests. Timing is diagnostic, not a pass/fail assertion, because host scheduling and hardware affect it. Memory reporting distinguishes the design's nominal 416 entry bits from the actual C model structure size, which includes metadata and padding.
+The workload harness interleaves three ASID-tagged streams in a deterministic round-robin schedule and compares all-4-KiB mappings with a fixed 4-KiB/64-KiB/2-MiB mapping mix. It reports aggregate and per-process counters, modeled storage, and host CPU time. CTest checks expected deterministic counts and miss reduction, never elapsed time; this is a policy harness, not an OS scheduler. Timing is diagnostic because host scheduling affects it. Memory reporting distinguishes nominal 416 entry bits from actual C model storage.
 
 A C model cannot directly measure hardware TLB energy. It can report event counts and, if approved, calculate an explicitly labeled energy estimate using configurable costs per event. That estimate must not be presented as measured joules.
 

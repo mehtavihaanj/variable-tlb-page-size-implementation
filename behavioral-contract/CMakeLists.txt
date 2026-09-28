@@ -23,9 +23,13 @@ target_link_libraries(test_tlb_lru PRIVATE tlb_contract)
 add_executable(test_tlb_metrics tests/test_tlb_metrics.c)
 target_link_libraries(test_tlb_metrics PRIVATE tlb_contract)
 
+add_executable(tlb_workload tests/tlb_workload.c)
+target_link_libraries(tlb_workload PRIVATE tlb_contract)
+
 enable_testing()
 add_test(NAME behavioral_contract COMMAND test_contract)
 add_test(NAME tlb_state COMMAND test_tlb_state)
 add_test(NAME tlb_invalidation COMMAND test_tlb_invalidation)
 add_test(NAME tlb_lru COMMAND test_tlb_lru)
 add_test(NAME tlb_metrics COMMAND test_tlb_metrics)
+add_test(NAME workload_integration COMMAND tlb_workload --iterations 2000)
