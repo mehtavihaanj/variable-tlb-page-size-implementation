@@ -123,7 +123,19 @@ void tlb_init(tlb_t *tlb)
     if (tlb != NULL)
     {
         memset(tlb, 0, sizeof(*tlb));
+        tlb->allowed_page_orders = TLB_PAGE_ORDERS_ABSTRACT;
     }
+}
+
+bool tlb_init_config(tlb_t *tlb, uint64_t allowed_page_orders)
+{
+    if (tlb == NULL || allowed_page_orders == 0)
+    {
+        return false;
+    }
+    tlb_init(tlb);
+    tlb->allowed_page_orders = allowed_page_orders;
+    return true;
 }
 
 static size_t find_matching_slot(const tlb_t *tlb, uint64_t virtual_address,
@@ -212,6 +224,11 @@ tlb_result_t tlb_refill(tlb_t *tlb, const tlb_entry_t *translation,
         return TLB_RESULT_INVALID_TRANSLATION;
     }
 
+    unsigned resolved_order = page_order(translation->address_mask, address_bits);
+    if ((tlb->allowed_page_orders & (UINT64_C(1) << resolved_order)) == 0)
+    {
+        return TLB_RESULT_UNSUPPORTED_PAGE_SIZE;
+    }
     size_t duplicate = TLB_ENTRY_COUNT;
     for (size_t index = 0; index < TLB_ENTRY_COUNT; ++index)
     {
@@ -243,8 +260,6 @@ tlb_result_t tlb_refill(tlb_t *tlb, const tlb_entry_t *translation,
     }
     size_t free_slot = duplicate != TLB_ENTRY_COUNT ? duplicate :
                        select_refill_slot(tlb);
-    unsigned resolved_order = page_order(translation->address_mask,
-                                         address_bits);
     ++tlb->stats.refills;
     ++tlb->stats.misses_by_page_order[resolved_order];
     if (result == TLB_RESULT_PERMISSION_FAULT)
@@ -270,9 +285,29 @@ tlb_result_t tlb_probe(tlb_t *tlb, uint64_t virtual_address,
                       unsigned address_bits, uint32_t asid,
                       tlb_access_t access, uint64_t *physical_address)
 {
-    if (tlb == NULL || physical_address == NULL)
+    if (tlb == NULL || physical_address == NULL ||
+        !address_fits_width(virtual_address, address_bits) ||
+        (access != TLB_ACCESS_READ && access != TLB_ACCESS_WRITE &&
+         access != TLB_ACCESS_EXECUTE))
     {
         return TLB_RESULT_INVALID_ARGUMENT;
+    }
+    for (size_t index = 0; index < TLB_ENTRY_COUNT; ++index)
+    {
+        const tlb_entry_t *entry = &tlb->entries[index];
+        if (!entry->valid)
+        {
+            continue;
+        }
+        if (!entry_is_well_formed(entry, address_bits))
+        {
+            return TLB_RESULT_INVALID_ARGUMENT;
+        }
+        if ((tlb->allowed_page_orders &
+             (UINT64_C(1) << page_order(entry->address_mask, address_bits))) == 0)
+        {
+            return TLB_RESULT_UNSUPPORTED_PAGE_SIZE;
+        }
     }
 
     tlb_result_t result = tlb_lookup(tlb->entries, TLB_ENTRY_COUNT,

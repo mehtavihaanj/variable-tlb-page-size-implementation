@@ -48,3 +48,7 @@ add_test(NAME tlb_overlap COMMAND test_tlb_overlap)
 add_executable(test_tlb_stale tests/test_tlb_stale.c)
 target_link_libraries(test_tlb_stale PRIVATE tlb_contract)
 add_test(NAME tlb_stale COMMAND test_tlb_stale)
+
+add_executable(test_tlb_page_sizes tests/test_tlb_page_sizes.c)
+target_link_libraries(test_tlb_page_sizes PRIVATE tlb_contract)
+add_test(NAME tlb_page_sizes COMMAND test_tlb_page_sizes)
