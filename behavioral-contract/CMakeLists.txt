@@ -33,3 +33,30 @@ add_test(NAME tlb_invalidation COMMAND test_tlb_invalidation)
 add_test(NAME tlb_lru COMMAND test_tlb_lru)
 add_test(NAME tlb_metrics COMMAND test_tlb_metrics)
 add_test(NAME workload_integration COMMAND tlb_workload --iterations 2000)
+add_executable(test_tlb_refill tests/test_tlb_refill.c)
+target_link_libraries(test_tlb_refill PRIVATE tlb_contract)
+add_test(NAME tlb_refill COMMAND test_tlb_refill)
+
+add_executable(test_tlb_probe tests/test_tlb_probe.c)
+target_link_libraries(test_tlb_probe PRIVATE tlb_contract)
+add_test(NAME tlb_probe COMMAND test_tlb_probe)
+
+add_executable(test_tlb_overlap tests/test_tlb_overlap.c)
+target_link_libraries(test_tlb_overlap PRIVATE tlb_contract)
+add_test(NAME tlb_overlap COMMAND test_tlb_overlap)
+
+add_executable(test_tlb_stale tests/test_tlb_stale.c)
+target_link_libraries(test_tlb_stale PRIVATE tlb_contract)
+add_test(NAME tlb_stale COMMAND test_tlb_stale)
+
+add_executable(test_tlb_page_sizes tests/test_tlb_page_sizes.c)
+target_link_libraries(test_tlb_page_sizes PRIVATE tlb_contract)
+add_test(NAME tlb_page_sizes COMMAND test_tlb_page_sizes)
+
+add_executable(test_tlb_flush tests/test_tlb_flush.c)
+target_link_libraries(test_tlb_flush PRIVATE tlb_contract)
+add_test(NAME tlb_flush COMMAND test_tlb_flush)
+
+add_executable(test_workload_trace tests/test_workload_trace.c)
+target_link_libraries(test_workload_trace PRIVATE tlb_contract)
+add_test(NAME workload_trace COMMAND test_workload_trace)

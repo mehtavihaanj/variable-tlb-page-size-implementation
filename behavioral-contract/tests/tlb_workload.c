@@ -1,4 +1,5 @@
 #include "tlb_contract.h"
+#include "workload_trace.h"
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -9,12 +10,6 @@
 #define PROCESS_COUNT 3
 #define DEFAULT_ITERATIONS UINT64_C(50000)
 #define MAX_ITERATIONS UINT64_C(1000000)
-
-static const uint64_t region_base[PROCESS_COUNT + 1] = {
-    0, UINT64_C(0x01000000), UINT64_C(0x10000000), UINT64_C(0x40000000)};
-static const uint64_t region_size[PROCESS_COUNT + 1] = {
-    0, UINT64_C(8192), UINT64_C(65536), UINT64_C(4194304)};
-static const uint64_t page_stride[PROCESS_COUNT + 1] = {0, 5, 7, 13};
 
 typedef struct {
     bool mixed_page_sizes;
@@ -28,6 +23,7 @@ typedef struct {
 
 typedef struct {
     tlb_stats_t tlb;
+    uint64_t trace_hash;
     process_stats_t process[PROCESS_COUNT + 1];
     double elapsed_ms;
     bool timing_available;
@@ -71,6 +67,7 @@ static bool run_workload(bool mixed_page_sizes, uint64_t iterations,
                          workload_result_t *result)
 {
     memset(result, 0, sizeof(*result));
+    result->trace_hash = WORKLOAD_HASH_SEED;
     tlb_t tlb;
     tlb_init(&tlb);
     workload_policy_t policy = {mixed_page_sizes};
@@ -80,13 +77,8 @@ static bool run_workload(bool mixed_page_sizes, uint64_t iterations,
     {
         for (uint32_t asid = 1; asid <= PROCESS_COUNT; ++asid)
         {
-            unsigned order = page_order_for(asid, mixed_page_sizes);
-            uint64_t page_size = UINT64_C(1) << order;
-            uint64_t page_count = region_size[asid] / page_size;
-            uint64_t page_index = iteration * page_stride[asid] % page_count;
-            uint64_t offset = (iteration * 64 + asid * 16) % page_size;
-            uint64_t virtual_address = region_base[asid] +
-                                       page_index * page_size + offset;
+            uint64_t virtual_address = workload_address(iteration, asid);
+            result->trace_hash = workload_hash(result->trace_hash, virtual_address, asid);
             uint64_t previous_hits = tlb.stats.hits;
             uint64_t previous_misses = tlb.stats.misses;
             uint64_t physical_address = 0;
@@ -94,7 +86,8 @@ static bool run_workload(bool mixed_page_sizes, uint64_t iterations,
             tlb_result_t access_result = tlb_access(
                 &tlb, virtual_address, 32, asid, TLB_ACCESS_READ,
                 walk_page, &policy, &physical_address);
-            if (access_result != TLB_RESULT_HIT)
+            if (access_result != TLB_RESULT_HIT || physical_address !=
+                ((uint64_t)asid << 28) + virtual_address - region_base[asid])
             {
                 return false;
             }
@@ -120,6 +113,7 @@ static bool run_workload(bool mixed_page_sizes, uint64_t iterations,
 
 static void print_result(const char *name, const workload_result_t *result)
 {
+    printf("trace version=1 hash=%" PRIu64 "\n", result->trace_hash);
     printf("%s: accesses=%" PRIu64 " hits=%" PRIu64 " misses=%" PRIu64
            " walks=%" PRIu64 " refills=%" PRIu64 " evictions=%" PRIu64
            " occupancy=%zu/%zu storage=%zu bytes",

@@ -34,6 +34,23 @@ A C model cannot directly measure hardware TLB energy. It can report event count
 
 ## Design Checks to Preserve
 
+### Reproducible workload traces
+
+Trace version 1 generates virtual addresses independently of the mapping policy.
+Each process visits a permutation of fixed 4-KiB blocks in its existing region,
+with a rotating cache-line offset; ASIDs run in the order 1, 2, 3 each iteration.
+Changing page size changes translation coverage, never the requested addresses.
+
+Each workload result prints the trace version and a deterministic fingerprint.
+Matching fingerprints help detect mismatched comparison inputs; they are not a
+cryptographic proof. Tests also check exact addresses, full block coverage,
+physical translations under both policies, and deterministic miss counts.
+
+Historical benchmark files generated with the old page-dependent trace should
+be treated as separate experiments. Regenerate comparisons with trace version 1
+before drawing conclusions from them. Host CPU timings remain diagnostic.
+
+
 - Define one mask convention and use it consistently for matching and offset extraction.
 - Require valid entry, matching ASID, and matching virtual address for a translation hit; check permissions as a separate result.
 - Detect multiple matching entries as an invariant violation instead of selecting an arbitrary translation.
