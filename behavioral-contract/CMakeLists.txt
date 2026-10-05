@@ -56,3 +56,7 @@ add_test(NAME tlb_page_sizes COMMAND test_tlb_page_sizes)
 add_executable(test_tlb_flush tests/test_tlb_flush.c)
 target_link_libraries(test_tlb_flush PRIVATE tlb_contract)
 add_test(NAME tlb_flush COMMAND test_tlb_flush)
+
+add_executable(test_workload_trace tests/test_workload_trace.c)
+target_link_libraries(test_workload_trace PRIVATE tlb_contract)
+add_test(NAME workload_trace COMMAND test_workload_trace)
