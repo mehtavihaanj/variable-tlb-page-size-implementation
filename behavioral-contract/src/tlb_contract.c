@@ -173,6 +173,62 @@ static void update_occupancy(tlb_t *tlb)
     }
 }
 
+tlb_result_t tlb_refill(tlb_t *tlb, const tlb_entry_t *translation,
+                       uint64_t virtual_address, unsigned address_bits,
+                       uint32_t asid, tlb_access_t access,
+                       uint64_t *physical_address)
+{
+    if (tlb == NULL || translation == NULL || physical_address == NULL ||
+        !address_fits_width(virtual_address, address_bits) ||
+        (access != TLB_ACCESS_READ && access != TLB_ACCESS_WRITE &&
+         access != TLB_ACCESS_EXECUTE))
+    {
+        return TLB_RESULT_INVALID_ARGUMENT;
+    }
+    tlb_result_t result = tlb_lookup(translation, 1, virtual_address, address_bits,
+                        asid, access, physical_address);
+    if (result != TLB_RESULT_HIT &&
+        result != TLB_RESULT_PERMISSION_FAULT)
+    {
+        return TLB_RESULT_INVALID_TRANSLATION;
+    }
+
+    size_t free_slot = TLB_ENTRY_COUNT;
+    for (size_t index = 0; index < TLB_ENTRY_COUNT; ++index)
+    {
+        if (!tlb->entries[index].valid)
+        {
+            free_slot = index;
+            break;
+        }
+    }
+    unsigned resolved_order = page_order(translation->address_mask,
+                                         address_bits);
+    ++tlb->stats.refills;
+    ++tlb->stats.misses_by_page_order[resolved_order];
+    if (result == TLB_RESULT_PERMISSION_FAULT)
+    {
+        ++tlb->stats.permission_faults;
+    }
+    if (free_slot == TLB_ENTRY_COUNT)
+    {
+        ++tlb->stats.evictions;
+        free_slot = 0;
+        for (size_t index = 1; index < TLB_ENTRY_COUNT; ++index)
+        {
+            if (tlb->last_used[index] < tlb->last_used[free_slot])
+            {
+                free_slot = index;
+            }
+        }
+    }
+
+    tlb->entries[free_slot] = *translation;
+    mark_recently_used(tlb, free_slot);
+    update_occupancy(tlb);
+    return result;
+}
+
 tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
                         unsigned address_bits, uint32_t asid,
                         tlb_access_t access, tlb_page_walker_t page_walker,
@@ -221,15 +277,6 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
         return TLB_RESULT_INVALID_ARGUMENT;
     }
 
-    size_t free_slot = TLB_ENTRY_COUNT;
-    for (size_t index = 0; index < TLB_ENTRY_COUNT; ++index)
-    {
-        if (!tlb->entries[index].valid)
-        {
-            free_slot = index;
-            break;
-        }
-    }
     tlb_entry_t translation = {0};
     ++tlb->stats.page_walks;
     if (!page_walker(walker_context, virtual_address, address_bits, asid,
@@ -239,39 +286,13 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
         return TLB_RESULT_WALK_FAILED;
     }
 
-    result = tlb_lookup(&translation, 1, virtual_address, address_bits,
+    result = tlb_refill(tlb, &translation, virtual_address, address_bits,
                         asid, access, physical_address);
-    if (result != TLB_RESULT_HIT &&
-        result != TLB_RESULT_PERMISSION_FAULT)
+    if (result == TLB_RESULT_INVALID_TRANSLATION ||
+        result == TLB_RESULT_INVALID_ARGUMENT)
     {
         ++tlb->stats.unresolved_misses;
-        return TLB_RESULT_INVALID_TRANSLATION;
     }
-
-    unsigned resolved_order = page_order(translation.address_mask,
-                                         address_bits);
-    ++tlb->stats.refills;
-    ++tlb->stats.misses_by_page_order[resolved_order];
-    if (result == TLB_RESULT_PERMISSION_FAULT)
-    {
-        ++tlb->stats.permission_faults;
-    }
-    if (free_slot == TLB_ENTRY_COUNT)
-    {
-        ++tlb->stats.evictions;
-        free_slot = 0;
-        for (size_t index = 1; index < TLB_ENTRY_COUNT; ++index)
-        {
-            if (tlb->last_used[index] < tlb->last_used[free_slot])
-            {
-                free_slot = index;
-            }
-        }
-    }
-
-    tlb->entries[free_slot] = translation;
-    mark_recently_used(tlb, free_slot);
-    update_occupancy(tlb);
     return result;
 }
 
