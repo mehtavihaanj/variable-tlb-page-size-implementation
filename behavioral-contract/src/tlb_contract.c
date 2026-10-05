@@ -173,6 +173,24 @@ static void update_occupancy(tlb_t *tlb)
     }
 }
 
+/* Inspect current state without changing entries, recency, or metrics. */
+static size_t select_refill_slot(const tlb_t *tlb)
+{
+    size_t victim = 0;
+    for (size_t index = 0; index < TLB_ENTRY_COUNT; ++index)
+    {
+        if (!tlb->entries[index].valid)
+        {
+            return index;
+        }
+        if (tlb->last_used[index] < tlb->last_used[victim])
+        {
+            victim = index;
+        }
+    }
+    return victim;
+}
+
 tlb_result_t tlb_refill(tlb_t *tlb, const tlb_entry_t *translation,
                        uint64_t virtual_address, unsigned address_bits,
                        uint32_t asid, tlb_access_t access,
@@ -193,15 +211,7 @@ tlb_result_t tlb_refill(tlb_t *tlb, const tlb_entry_t *translation,
         return TLB_RESULT_INVALID_TRANSLATION;
     }
 
-    size_t free_slot = TLB_ENTRY_COUNT;
-    for (size_t index = 0; index < TLB_ENTRY_COUNT; ++index)
-    {
-        if (!tlb->entries[index].valid)
-        {
-            free_slot = index;
-            break;
-        }
-    }
+    size_t free_slot = select_refill_slot(tlb);
     unsigned resolved_order = page_order(translation->address_mask,
                                          address_bits);
     ++tlb->stats.refills;
@@ -210,17 +220,9 @@ tlb_result_t tlb_refill(tlb_t *tlb, const tlb_entry_t *translation,
     {
         ++tlb->stats.permission_faults;
     }
-    if (free_slot == TLB_ENTRY_COUNT)
+    if (tlb->entries[free_slot].valid)
     {
         ++tlb->stats.evictions;
-        free_slot = 0;
-        for (size_t index = 1; index < TLB_ENTRY_COUNT; ++index)
-        {
-            if (tlb->last_used[index] < tlb->last_used[free_slot])
-            {
-                free_slot = index;
-            }
-        }
     }
 
     tlb->entries[free_slot] = *translation;
@@ -229,10 +231,9 @@ tlb_result_t tlb_refill(tlb_t *tlb, const tlb_entry_t *translation,
     return result;
 }
 
-tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
-                        unsigned address_bits, uint32_t asid,
-                        tlb_access_t access, tlb_page_walker_t page_walker,
-                        void *walker_context, uint64_t *physical_address)
+tlb_result_t tlb_probe(tlb_t *tlb, uint64_t virtual_address,
+                      unsigned address_bits, uint32_t asid,
+                      tlb_access_t access, uint64_t *physical_address)
 {
     if (tlb == NULL || physical_address == NULL)
     {
@@ -271,6 +272,20 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
         return result;
     }
     ++tlb->stats.misses;
+    return TLB_RESULT_MISS;
+}
+
+tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
+                        unsigned address_bits, uint32_t asid,
+                        tlb_access_t access, tlb_page_walker_t page_walker,
+                        void *walker_context, uint64_t *physical_address)
+{
+    tlb_result_t result = tlb_probe(tlb, virtual_address, address_bits,
+                                    asid, access, physical_address);
+    if (result != TLB_RESULT_MISS)
+    {
+        return result;
+    }
     if (page_walker == NULL)
     {
         ++tlb->stats.unresolved_misses;

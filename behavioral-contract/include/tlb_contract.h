@@ -81,10 +81,19 @@ tlb_result_t tlb_lookup(const tlb_entry_t *entries, size_t entry_count,
 void tlb_init(tlb_t *tlb);
 size_t tlb_storage_bytes(void);
 
+/* Account one lookup and refresh recency on translation matches (including
+ * permission faults). A miss returns immediately without starting a walk.
+ * Invalid requests leave state unchanged; use tlb_lookup for pure inspection.
+ */
+tlb_result_t tlb_probe(tlb_t *tlb, uint64_t virtual_address,
+                      unsigned address_bits, uint32_t asid,
+                      tlb_access_t access, uint64_t *physical_address);
+
 /* Complete a successful walk; caller guarantees no overlapping live mapping.
  * Updates refill/eviction, resolved-page, permission-fault and occupancy stats.
- * The driver owns access/miss/walk/unresolved counts. Invalid input leaves state
- * and output unchanged; permission faults cache the mapping without output.
+ * Probe owns access/miss counts; the driver owns walk/unresolved counts.
+ * Invalid input leaves state and output unchanged; permission faults cache
+ * the mapping without output.
  */
 tlb_result_t tlb_refill(tlb_t *tlb, const tlb_entry_t *translation,
                        uint64_t virtual_address, unsigned address_bits,

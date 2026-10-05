@@ -36,3 +36,7 @@ add_test(NAME workload_integration COMMAND tlb_workload --iterations 2000)
 add_executable(test_tlb_refill tests/test_tlb_refill.c)
 target_link_libraries(test_tlb_refill PRIVATE tlb_contract)
 add_test(NAME tlb_refill COMMAND test_tlb_refill)
+
+add_executable(test_tlb_probe tests/test_tlb_probe.c)
+target_link_libraries(test_tlb_probe PRIVATE tlb_contract)
+add_test(NAME tlb_probe COMMAND test_tlb_probe)
