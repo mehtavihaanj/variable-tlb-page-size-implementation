@@ -26,7 +26,8 @@ typedef enum {
     TLB_RESULT_WALK_FAILED,
     TLB_RESULT_INVALID_TRANSLATION,
     TLB_RESULT_INVALID_ARGUMENT,
-    TLB_RESULT_REFILL_CONFLICT
+    TLB_RESULT_REFILL_CONFLICT,
+    TLB_RESULT_STALE_REFILL
 } tlb_result_t;
 
 typedef struct {
@@ -63,6 +64,7 @@ typedef struct {
     tlb_entry_t entries[TLB_ENTRY_COUNT];
     uint64_t last_used[TLB_ENTRY_COUNT];
     uint64_t use_sequence;
+    uint64_t invalidation_generation;
     tlb_stats_t stats;
 } tlb_t;
 
@@ -104,6 +106,20 @@ tlb_result_t tlb_refill(tlb_t *tlb, const tlb_entry_t *translation,
                        uint64_t virtual_address, unsigned address_bits,
                        uint32_t asid, tlb_access_t access,
                        uint64_t *physical_address);
+
+/* Capture invalidation_generation before starting a walk and pass it here.
+ * Any valid invalidation stales outstanding walks, including other ASIDs and
+ * ranges with no cached entries. Rejected completions leave state/output alone.
+ * UINT64_MAX is a fail-closed exhausted generation. Reinitialize only after
+ * cancelling all pending walks; tokens belong to this TLB instance/lifetime.
+ * tlb_refill is for immediate insertions; delayed drivers must use this API
+ * and account rejected completions as unresolved before retrying a fresh walk.
+ */
+tlb_result_t tlb_complete_walk(tlb_t *tlb, uint64_t generation,
+                              const tlb_entry_t *translation,
+                              uint64_t virtual_address, unsigned address_bits,
+                              uint32_t asid, tlb_access_t access,
+                              uint64_t *physical_address);
 
 tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
                         unsigned address_bits, uint32_t asid,

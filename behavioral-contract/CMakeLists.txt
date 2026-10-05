@@ -44,3 +44,7 @@ add_test(NAME tlb_probe COMMAND test_tlb_probe)
 add_executable(test_tlb_overlap tests/test_tlb_overlap.c)
 target_link_libraries(test_tlb_overlap PRIVATE tlb_contract)
 add_test(NAME tlb_overlap COMMAND test_tlb_overlap)
+
+add_executable(test_tlb_stale tests/test_tlb_stale.c)
+target_link_libraries(test_tlb_stale PRIVATE tlb_contract)
+add_test(NAME tlb_stale COMMAND test_tlb_stale)

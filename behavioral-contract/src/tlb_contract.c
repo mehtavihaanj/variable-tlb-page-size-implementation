@@ -310,6 +310,24 @@ tlb_result_t tlb_probe(tlb_t *tlb, uint64_t virtual_address,
     return TLB_RESULT_MISS;
 }
 
+tlb_result_t tlb_complete_walk(tlb_t *tlb, uint64_t generation,
+                              const tlb_entry_t *translation,
+                              uint64_t virtual_address, unsigned address_bits,
+                              uint32_t asid, tlb_access_t access,
+                              uint64_t *physical_address)
+{
+    if (tlb == NULL)
+    {
+        return TLB_RESULT_INVALID_ARGUMENT;
+    }
+    if (generation != tlb->invalidation_generation || generation == UINT64_MAX)
+    {
+        return TLB_RESULT_STALE_REFILL;
+    }
+    return tlb_refill(tlb, translation, virtual_address, address_bits,
+                      asid, access, physical_address);
+}
+
 tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
                         unsigned address_bits, uint32_t asid,
                         tlb_access_t access, tlb_page_walker_t page_walker,
@@ -328,6 +346,7 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
     }
 
     tlb_entry_t translation = {0};
+    uint64_t generation = tlb->invalidation_generation;
     ++tlb->stats.page_walks;
     if (!page_walker(walker_context, virtual_address, address_bits, asid,
                      access, &translation))
@@ -336,8 +355,8 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
         return TLB_RESULT_WALK_FAILED;
     }
 
-    result = tlb_refill(tlb, &translation, virtual_address, address_bits,
-                        asid, access, physical_address);
+    result = tlb_complete_walk(tlb, generation, &translation, virtual_address,
+                               address_bits, asid, access, physical_address);
     if (result != TLB_RESULT_HIT && result != TLB_RESULT_PERMISSION_FAULT)
     {
         ++tlb->stats.unresolved_misses;
@@ -366,6 +385,11 @@ tlb_invalidation_result_t tlb_invalidate_overlap(
         }
     }
 
+    /* Even a no-match invalidation can race an outstanding page walk. */
+    if (tlb->invalidation_generation != UINT64_MAX)
+    {
+        ++tlb->invalidation_generation;
+    }
     uint64_t width_mask = address_width_mask(address_bits);
     uint64_t request_end = virtual_base | (~address_mask & width_mask);
     *invalidated_count = 0;
