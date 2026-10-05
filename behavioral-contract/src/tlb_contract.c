@@ -399,6 +399,14 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
     return result;
 }
 
+static void advance_generation(tlb_t *tlb)
+{
+    if (tlb->invalidation_generation != UINT64_MAX)
+    {
+        ++tlb->invalidation_generation;
+    }
+}
+
 tlb_invalidation_result_t tlb_invalidate_overlap(
     tlb_t *tlb, uint64_t virtual_base, uint64_t address_mask,
     unsigned address_bits, uint32_t asid, size_t *invalidated_count)
@@ -421,10 +429,7 @@ tlb_invalidation_result_t tlb_invalidate_overlap(
     }
 
     /* Even a no-match invalidation can race an outstanding page walk. */
-    if (tlb->invalidation_generation != UINT64_MAX)
-    {
-        ++tlb->invalidation_generation;
-    }
+    advance_generation(tlb);
     uint64_t width_mask = address_width_mask(address_bits);
     uint64_t request_end = virtual_base | (~address_mask & width_mask);
     *invalidated_count = 0;
@@ -454,4 +459,37 @@ tlb_invalidation_result_t tlb_invalidate_overlap(
 size_t tlb_storage_bytes(void)
 {
     return sizeof(tlb_t);
+}
+
+static tlb_invalidation_result_t flush(tlb_t *tlb, bool all, uint32_t asid,
+                                       size_t *removed)
+{
+    if (tlb == NULL || removed == NULL)
+    {
+        return TLB_INVALIDATION_INVALID_ARGUMENT;
+    }
+    advance_generation(tlb);
+    *removed = 0;
+    for (size_t index = 0; index < TLB_ENTRY_COUNT; ++index)
+    {
+        tlb_entry_t *entry = &tlb->entries[index];
+        if (entry->valid && (all || entry->asid == asid))
+        {
+            entry->valid = false;
+            ++*removed;
+        }
+    }
+    tlb->stats.invalidations += *removed;
+    update_occupancy(tlb);
+    return *removed ? TLB_INVALIDATION_REMOVED : TLB_INVALIDATION_NO_MATCH;
+}
+
+tlb_invalidation_result_t tlb_flush_all(tlb_t *tlb, size_t *removed)
+{
+    return flush(tlb, true, 0, removed);
+}
+
+tlb_invalidation_result_t tlb_flush_asid(tlb_t *tlb, uint32_t asid, size_t *removed)
+{
+    return flush(tlb, false, asid, removed);
 }

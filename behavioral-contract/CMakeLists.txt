@@ -52,3 +52,7 @@ add_test(NAME tlb_stale COMMAND test_tlb_stale)
 add_executable(test_tlb_page_sizes tests/test_tlb_page_sizes.c)
 target_link_libraries(test_tlb_page_sizes PRIVATE tlb_contract)
 add_test(NAME tlb_page_sizes COMMAND test_tlb_page_sizes)
+
+add_executable(test_tlb_flush tests/test_tlb_flush.c)
+target_link_libraries(test_tlb_flush PRIVATE tlb_contract)
+add_test(NAME tlb_flush COMMAND test_tlb_flush)

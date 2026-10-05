@@ -142,4 +142,12 @@ tlb_invalidation_result_t tlb_invalidate_overlap(
     tlb_t *tlb, uint64_t virtual_base, uint64_t address_mask,
     unsigned address_bits, uint32_t asid, size_t *invalidated_count);
 
+/* Flushes retain cumulative statistics and configuration. Every valid call
+ * advances the global walk generation, including empty/no-match flushes.
+ * Return the removed count; invalid arguments leave state and count unchanged.
+ */
+tlb_invalidation_result_t tlb_flush_all(tlb_t *tlb, size_t *removed);
+tlb_invalidation_result_t tlb_flush_asid(tlb_t *tlb, uint32_t asid,
+                                       size_t *removed);
+
 #endif
