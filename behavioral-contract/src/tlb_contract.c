@@ -203,15 +203,46 @@ tlb_result_t tlb_refill(tlb_t *tlb, const tlb_entry_t *translation,
     {
         return TLB_RESULT_INVALID_ARGUMENT;
     }
+    uint64_t resolved_address = 0;
     tlb_result_t result = tlb_lookup(translation, 1, virtual_address, address_bits,
-                        asid, access, physical_address);
+                                   asid, access, &resolved_address);
     if (result != TLB_RESULT_HIT &&
         result != TLB_RESULT_PERMISSION_FAULT)
     {
         return TLB_RESULT_INVALID_TRANSLATION;
     }
 
-    size_t free_slot = select_refill_slot(tlb);
+    size_t duplicate = TLB_ENTRY_COUNT;
+    for (size_t index = 0; index < TLB_ENTRY_COUNT; ++index)
+    {
+        const tlb_entry_t *entry = &tlb->entries[index];
+        if (!entry->valid)
+        {
+            continue;
+        }
+        if (!entry_is_well_formed(entry, address_bits))
+        {
+            return TLB_RESULT_INVALID_ARGUMENT;
+        }
+        /* Aligned power-of-two ranges overlap when their common prefix agrees. */
+        if (entry->asid != asid ||
+            ((entry->virtual_base ^ translation->virtual_base) &
+             entry->address_mask & translation->address_mask) != 0)
+        {
+            continue;
+        }
+        if (duplicate != TLB_ENTRY_COUNT ||
+            entry->virtual_base != translation->virtual_base ||
+            entry->address_mask != translation->address_mask ||
+            entry->physical_base != translation->physical_base ||
+            entry->permissions != translation->permissions)
+        {
+            return TLB_RESULT_REFILL_CONFLICT;
+        }
+        duplicate = index;
+    }
+    size_t free_slot = duplicate != TLB_ENTRY_COUNT ? duplicate :
+                       select_refill_slot(tlb);
     unsigned resolved_order = page_order(translation->address_mask,
                                          address_bits);
     ++tlb->stats.refills;
@@ -220,7 +251,7 @@ tlb_result_t tlb_refill(tlb_t *tlb, const tlb_entry_t *translation,
     {
         ++tlb->stats.permission_faults;
     }
-    if (tlb->entries[free_slot].valid)
+    if (duplicate == TLB_ENTRY_COUNT && tlb->entries[free_slot].valid)
     {
         ++tlb->stats.evictions;
     }
@@ -228,6 +259,10 @@ tlb_result_t tlb_refill(tlb_t *tlb, const tlb_entry_t *translation,
     tlb->entries[free_slot] = *translation;
     mark_recently_used(tlb, free_slot);
     update_occupancy(tlb);
+    if (result == TLB_RESULT_HIT)
+    {
+        *physical_address = resolved_address;
+    }
     return result;
 }
 
@@ -303,8 +338,7 @@ tlb_result_t tlb_access(tlb_t *tlb, uint64_t virtual_address,
 
     result = tlb_refill(tlb, &translation, virtual_address, address_bits,
                         asid, access, physical_address);
-    if (result == TLB_RESULT_INVALID_TRANSLATION ||
-        result == TLB_RESULT_INVALID_ARGUMENT)
+    if (result != TLB_RESULT_HIT && result != TLB_RESULT_PERMISSION_FAULT)
     {
         ++tlb->stats.unresolved_misses;
     }

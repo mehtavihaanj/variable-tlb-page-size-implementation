@@ -25,7 +25,8 @@ typedef enum {
     TLB_RESULT_AMBIGUOUS,
     TLB_RESULT_WALK_FAILED,
     TLB_RESULT_INVALID_TRANSLATION,
-    TLB_RESULT_INVALID_ARGUMENT
+    TLB_RESULT_INVALID_ARGUMENT,
+    TLB_RESULT_REFILL_CONFLICT
 } tlb_result_t;
 
 typedef struct {
@@ -89,8 +90,12 @@ tlb_result_t tlb_probe(tlb_t *tlb, uint64_t virtual_address,
                       unsigned address_bits, uint32_t asid,
                       tlb_access_t access, uint64_t *physical_address);
 
-/* Complete a successful walk; caller guarantees no overlapping live mapping.
+/* Complete a successful walk. Identical same-ASID mappings refresh in place;
+ * conflicting overlaps return REFILL_CONFLICT without mutation or output.
+ * Invalidate explicitly before changing a mapping. Scan all entries before
+ * accepting duplicates, so preexisting ambiguity is never silently accepted.
  * Updates refill/eviction, resolved-page, permission-fault and occupancy stats.
+ * Accepted duplicates count as refills and resolved misses, never evictions.
  * Probe owns access/miss counts; the driver owns walk/unresolved counts.
  * Invalid input leaves state and output unchanged; permission faults cache
  * the mapping without output.

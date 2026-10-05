@@ -40,3 +40,7 @@ add_test(NAME tlb_refill COMMAND test_tlb_refill)
 add_executable(test_tlb_probe tests/test_tlb_probe.c)
 target_link_libraries(test_tlb_probe PRIVATE tlb_contract)
 add_test(NAME tlb_probe COMMAND test_tlb_probe)
+
+add_executable(test_tlb_overlap tests/test_tlb_overlap.c)
+target_link_libraries(test_tlb_overlap PRIVATE tlb_contract)
+add_test(NAME tlb_overlap COMMAND test_tlb_overlap)
